@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<meta name="viewport" content="initial-scale=0.667,minimum-scale=0.667,maximum-scale=0.667,width=device-width, user-scalable=no">
+<script src="https://geohex.net/src/img/src/script/simple2.js" type="text/javascript" content="text/html; charset=utf-8"></script>
+<script src="https://geohex.net/src/img/src/script/getXYListByRect.js" type="text/javascript" content="text/html; charset=utf-8"></script>
+<script src="https://geohex.net/src/img/src/script/hex_v3.2_core.js" type="text/javascript" content="text/html; charset=utf-8"></script>
+<script src="https://geohex.net/src/img/src/script/hex_gmap3.1.js" type="text/javascript" content="text/html; charset=utf-8"></script>
+<link rel="stylesheet" href="https://geohex.net/src/img/src/css/geohex.css" type="text/css" />
+<html>
+	<head>
+	    <title>GeoHex</title>
+	    <meta name="viewport" content="initial-scale=1.0">
+	    <meta charset="utf-8">
+	    <style>
+
+	</style>
+	</head>
+	<body>
+		<div id = "WholeFrame">
+		    <div id="gnavi1"> 
+		        <a href ="../../index.html"><img src = "https://geohex.net/src/img/src/img/geohex_logo_m.png" style="position:absolute;z-index:40;top:22px;left:12px;" border="0" /></a>
+		        <div id="header" style="position:absolute;z-index:10;top:0px;left:0px;width:100%;height:30px;background:url(https://geohex.net/src/img/src/img/headerbg_l.png) no-repeat 0 0;color:#ffffff;">
+		            <div style="padding-left:385px; text-decoration:none;">
+		                <div style="width;100%;border-bottom:1px solid #aaaaaa;height:29px;margin:0px;background-color:#000;text-align:right;">
+		                </div>
+		            </div>
+		        </div>
+		    </div>
+		    <div id = "tr_links"><a href="http://www.geohex.org" target="_blank">docs</a>
+		    </div>
+		    <div id="gnavi2">
+		        <div id = "gnavi_l"></div>
+		        <div id = "g2">
+		        	<div  id="btn01" ><label id="hex_level">LV: 6</lavel></div>
+		            <div id="slider"><input type="range" id="scale_bar" name="volume" min="0" max="11" oninput="setHexSize(this.value)" /></div>
+		        </div>
+		    </div> 
+
+		    <div id="srcbox">
+		    	<div id="sbox_r" onclick="srcbox_clear()"></div><input name="input" id="sbox_m" type="text" placeholder="Lat, Lng or Hex ID" />
+		    </div>
+
+		    <div id="map_canvas"></div> 
+		    
+		    <div style="width:100%;background-color:#000000;border-bottom:1px solid #999999;height:24px;position:absolute;z-index:10;bottom:0px;left:0px;filter:alpha(opacity=90);-moz-opacity:0.90;opacity:0.90;color:#ffffff;font-size:11px;">
+		    	<div style="margin:6px;right:0px;" id="copy">Copyright &copy;&nbsp;&nbsp;2009 <a style="text-decoration:none;" href="http://twitter.com/sa2da">@sa2da</a>
+		   		</div>
+		    </div> 
+		</div>
+		<script>
+		var map;
+		var h_base = 20037508.34;
+		var hoverpolyon;
+		var previouspolyon;
+		var selectpolygon;
+		var polylines;
+		var level = 6;
+		var buffer = true;
+		var hexPolygon;
+		var InfoWindow;
+		var sliding;
+		var def_prop = {
+				linecolor: "#ffffff",
+				fillcolor: "#ffffff",
+				lineotp: 0.6,
+				lineweight: 1,
+				fillopt: 0.1,
+				popinfo:1
+			};
+
+		var $merge = function (org, src) {
+			org || (org = {});
+			src || (src = {});
+			var dest = {};
+			for (var idx in org) if (org.hasOwnProperty(idx)) {
+				dest[idx] = org[idx];
+			}
+			for (var idx in src) if (src.hasOwnProperty(idx)) {
+				dest[idx] = src[idx];
+			}
+			return dest;
+		};
+
+		var input = document.getElementById('sbox_m');
+		input.onkeypress = function(e){
+			if( e.keyCode == 13){
+				var src_input = input.value;
+			    var input_arr = src_input.split(",");
+
+			    if(input_arr.length == 1){
+			    	var zone = GEOHEX.getZoneByCode(input_arr[0]);
+			    	var polygon = initPolygon(zone);
+			    	polygon.setMap(map);
+					level = zone.code.length-2;
+					document.getElementById('hex_level').innerHTML = "LV: " + level;
+					document.getElementById('scale_bar').value = level;
+					selectHex(zone, polygon);
+
+			    }else if(input_arr.length == 2){
+			    	var zone = GEOHEX.getZoneByLocation(parseFloat(input_arr[0]), parseFloat(input_arr[1]), level);
+			    	var polygon = initPolygon(zone);
+			    	polygon.setMap(map);
+					selectHex(zone, polygon);
+				}else{
+					alert("Input format error");
+				}
+				this.blur();
+			}
+		}
+		function srcbox_clear(){
+			document.getElementById('sbox_m').value ="";
+		}
+
+		function initMap() {
+			var startpos = new google.maps.LatLng({lat: 35.68092, lng: 139.76740});
+			var adr=location.pathname;
+			adr=adr.substring(1);
+			var adr_arr=adr.split("/");
+			var h_code=adr_arr[0];
+
+			map = new google.maps.Map(document.getElementById('map_canvas'), {
+				center: {lat: 35.68092, lng: 139.76740},
+				zoom: 12,
+				backgroundColor: '#000000',
+				disableDefaultUI : true,
+				mapTypeControl: false,
+				scrollwheel: true,	
+				mapTypeControlOptions: {
+		     	mapTypeIds: [google.maps.MapTypeId.ROADMAP, 'GREEN']
+		     	}
+			});
+		    var gMapType = new google.maps.StyledMapType(style1,{name: "GREEN"});
+			map.mapTypes.set('GREEN', gMapType);
+			map.setMapTypeId('GREEN');
+
+			var mapinit = google.maps.event.addListener(map,'tilesloaded',function(){
+				refreshHex();
+				google.maps.event.removeListener(mapinit); // 今後この処理を無効化する
+			});
+			var hoverMap = google.maps.event.addListener(map,'mousemove',function(event){
+
+				var zone = GEOHEX.getZoneByLocation(event.latLng.lat(), event.latLng.lng(), level);
+
+				hoverHex(zone, {linecolor:"#ffffff",fillcolor:"#ffffff",popinfo:1});
+			});
+			var clickMap = google.maps.event.addListener(map,'click',function(event){
+				var zone = GEOHEX.getZoneByLocation(event.latLng.lat(), event.latLng.lng(), level);
+				var hexPolygon = initPolygon(zone);
+			    hexPolygon.setMap(map);
+				selectHex(zone, hexPolygon);
+				selectpolygon = hexPolygon;
+			});
+			infowindow = new google.maps.InfoWindow({
+			  size: new google.maps.Size(300, 50)
+			});
+			if(h_code){
+				var zone = GEOHEX.getZoneByCode(h_code);
+				var polygon = initPolygon(zone);
+				polygon.setMap(map);
+				level = h_code.length-2;
+				document.getElementById('sbox_m').value = h_code;
+				document.getElementById('hex_level').innerHTML = "LV: " + level;
+				document.getElementById('scale_bar').value = level;
+				var zoom_change = Math.ceil(level*1.5)+2;
+				map.setZoom(zoom_change);
+				selectHex(zone, polygon);
+			}
+		}
+
+
+		function initPolygon(_zone){
+			var prop = def_prop;
+			var linecolor = prop.linecolor;
+			var fillcolor = prop.fillcolor;
+			var lineotp= prop.lineotp;
+			var lineweight= prop.lineweight;
+			var fillopt= prop.fillopt;
+
+			var coords = _zone.getHexCoords();
+			var h_top = coords[1].lat;	// top-left
+			var h_btm = coords[4].lat;	// bottom-right
+			if ((h_btm > 85.051128514) || (h_top < -85.051128514))	return;
+
+			var h_level = _zone.getLevel();
+			var len = 6;	// == coords.length
+			var gCoords = new Array(len);
+			for (var idx = 0; idx < len; idx++) {
+				gCoords[idx] = new google.maps.LatLng(coords[idx].lat, coords[idx].lon);
+			}
+
+			var newPolygon = new google.maps.Polygon({
+				paths: gCoords,
+				strokeColor: linecolor,
+				strokeOpacity: lineotp,
+				strokeWeight: lineweight,
+				fillColor: fillcolor,
+				fillOpacity: fillopt
+				});
+			return newPolygon;
+		}
+
+		function hoverHex(_zone, _properties) {
+			var hexPolygon = initPolygon(_zone);
+
+			if(hoverpolyon && hoverpolyon != hexPolygon && selectpolygon != hoverpolyon) fadeOutHex(_zone.code, hoverpolyon, 0.5);
+			hexPolygon.setMap(map);
+
+			google.maps.event.addListener(hexPolygon, 'click', function (event) {
+				selectHex(_zone, hexPolygon);
+			});
+			google.maps.event.addListener(hexPolygon, 'mousemove', function (event) {
+				if(hoverpolyon && hoverpolyon != hexPolygon && selectpolygon != hoverpolyon) fadeOutHex(_zone.code, hoverpolyon, 0.5);
+			});  
+			hoverpolyon = hexPolygon;
+		}
+
+		function fadeOutHex(_code, polygon, opaValue){
+			var opa = opaValue;
+		    if (opaValue>0&&opaValue>0.01){
+		        polygon.setOptions({fillOpacity: opa, strokeOpacity: opa});
+		        opa = opa - 0.01;
+		        eval('fadeOut_timer_' + _code + '=setTimeout(function(){ fadeOutHex(_code, polygon, opa); }, 10)');
+		    } else {
+		        opa = 0;
+		        polygon.setOptions({fillOpacity: opa, strokeOpacity: opa});
+		        polygon.setMap(null);
+		        eval('clearTimeout(fadeOut_timer_' + _code + ')');
+		    }
+		}
+
+		function selectHex(_zone, _polygon) {
+			var coords = _zone.getHexCoords();
+			var newpos =new google.maps.LatLng({lat: _zone.lat, lng: _zone.lon});
+			map.panTo(newpos);
+		  	if(selectpolygon) selectpolygon.setMap(null);
+		    _polygon.setOptions({strokeWeight: 3.0, strokeColor: '#00e4ff' ,fillColor: '#00e4ff', fillOpacity: 0.4});
+		    var contentString = '<div id="content">'+
+		    '<div id="siteNotice">'+
+		    '</div>'+
+		    '<h2 id="firstHeading" class="firstHeading"><a style="color: #007aff; cursor: pointer; text-decoration:none;" href="../../'%20+%20_zone.code%20+%20'">' + _zone.code + '</a></h2>'+
+		    '<div id="bodyContent">'+
+		    'LV: '+ (_zone.code.length - 2) + '<br>' +
+		    'X: '+ _zone.x + ' Y: ' + _zone.y +
+		    '</div>'+
+		    '</div>';
+			infowindow.setContent(contentString);
+			infowindow.setPosition(new google.maps.LatLng(_zone.lat, _zone.lon));
+			infowindow.setOptions({
+				disableAutoPan: true,
+				Width: 300,
+				pixelOffset: new google.maps.Size(0, -15),
+				boxStyle: {
+		          opacity: 0.50,
+		          width: "280px"
+		        }
+			});
+			infowindow.open(map);
+
+			google.maps.event.addListener(infowindow,'closeclick',function(){
+		 		_polygon.setMap(null);
+		 	});
+		 	selectpolygon = hoverpolyon;
+		}
+
+		// Draw Hex in rectangle area
+
+		function refreshHex(){
+			if(hoverpolyon){
+				hoverpolyon.setMap(null);
+				hoverpolyon = "";
+			}
+		}
+
+		function drawRect(_sw, _ne){
+				var rectlist = getXYListByRect(_sw.lat(), _sw.lng(), _ne.lat(), _ne.lng(), level , buffer);
+				drawList(rectlist, 2000);
+		}
+
+		function drawList(_list, _drawMax){
+			removeList();
+			if(_list.length < _drawMax){
+		        for(var i in _list){
+					var zone = GEOHEX.getZoneByXY(_list[i].x,_list[i].y, level);
+					if(hotzone[zone.code]){
+						var count = hotzone[zone.code]/20 + 0.2;
+						if(count >=0.7) count = 0.7;
+						zone.drawHex(map ,{linecolor:"#ffffff",fillcolor:"ff0000",popinfo:0,lineweight:0.6,fillopt:count});
+					}else{
+						zone.drawHex(map ,{linecolor:"#ffffff",fillcolor:"000000",popinfo:0,lineweight:0.6,fillopt:0});
+					}
+		        }
+			}
+		}
+
+		function setHexSize(value){
+			level = parseInt(value,10);
+			var zoom_change = Math.ceil(level*1.5)+2;
+			map.setZoom(zoom_change);
+			document.getElementById("hex_level").innerHTML = "LV: " + level;
+
+		}
+
+		function removeList(){
+		  if (polylines) {
+		    for (i in polylines) {
+		      polylines[i].setMap(null);
+		    }
+		    polylines.length = 0;
+		  }
+		}
+
+		</script>
+		<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDmNu56wDHjPCUOVCA3vBP7_hAGo50wg2A&callback=initMap&libraries=geometry" async defer></script>
+	</body>
+</html>
